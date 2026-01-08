@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GLAD | Autonomous Trader Agent</title>
+  <link rel="icon" type="image/png" href="https://media.discordapp.net/attachments/1454587961642582039/1458727102755897375/ChatGPT_Image_8_de_jan._de_2026_04_40_39.png?ex=6960b0fb&is=695f5f7b&hm=75cdf4f501218a0eb13b2512c177f898195fde4c5d6cd7c1add552c3922b8726&=&format=webp&quality=lossless&width=1008&height=1008">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
@@ -74,14 +75,9 @@
       width: 40px;
       height: 40px;
       border-radius: 12px;
-      background: linear-gradient(135deg, var(--claude-orange), var(--claude-orange-dark));
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      object-fit: cover;
       box-shadow: 0 0 20px rgba(229, 117, 69, 0.3);
     }
-
-    .logo-icon svg { color: white; }
 
     .logo-text h1 {
       font-size: 1.25rem;
@@ -468,21 +464,21 @@
   </style>
 </head>
 <body>
-  <div id="app">
-    <div class="loading">
-      <div class="loading-icon">
-        <i data-lucide="bot" style="width: 32px; height: 32px; color: white;"></i>
-      </div>
-      <p>Loading GLAD...</p>
-    </div>
-  </div>
+  <div id="app"></div>
 
   <script>
     // Supabase Config
     const SUPABASE_URL = 'https://mkbaxfxjoejcqydzgvxi.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rYmF4Znhqb2VqY3F5ZHpndnhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc4NDc1NDEsImV4cCI6MjA4MzQyMzU0MX0.mM8RbFqYptqXxSk5196Crfw3bjVDp--5LTllmDa3fXY';
 
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    // Supabase client (initialized lazily)
+    let supabaseClient = null;
+    function getSupabase() {
+      if (!supabaseClient && window.supabase) {
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      }
+      return supabaseClient;
+    }
 
     // State
     let state = {
@@ -493,11 +489,14 @@
       isLive: false
     };
 
-    // Fetch Data
+    // Fetch Data (runs in background, doesn't block UI)
     async function fetchData() {
+      const supabase = getSupabase();
+      if (!supabase) return;
+
       try {
         const [statsRes, tradesRes, holdingsRes, buybacksRes] = await Promise.all([
-          supabase.from('agent_stats').select('*').eq('id', 'main').single(),
+          supabase.from('agent_stats').select('*').eq('id', 'main').maybeSingle(),
           supabase.from('trades').select('*').order('timestamp', { ascending: false }).limit(20),
           supabase.from('holdings').select('*').gt('amount', 0),
           supabase.from('buybacks').select('*').order('timestamp', { ascending: false }).limit(20)
@@ -518,7 +517,7 @@
         render();
       } catch (error) {
         console.error('Error fetching data:', error);
-        render();
+        // Silent fail - UI already showing, just won't update
       }
     }
 
@@ -558,9 +557,7 @@
         <header class="header">
           <div class="header-content">
             <div class="logo">
-              <div class="logo-icon">
-                <i data-lucide="bot"></i>
-              </div>
+              <img class="logo-icon" src="https://media.discordapp.net/attachments/1454587961642582039/1458727102755897375/ChatGPT_Image_8_de_jan._de_2026_04_40_39.png?ex=6960b0fb&is=695f5f7b&hm=75cdf4f501218a0eb13b2512c177f898195fde4c5d6cd7c1add552c3922b8726&=&format=webp&quality=lossless&width=1008&height=1008" alt="GLAD">
               <div class="logo-text">
                 <h1>GLAD</h1>
                 <p>Autonomous Trader</p>
@@ -813,19 +810,25 @@
 
     // Init
     document.addEventListener('DOMContentLoaded', () => {
-      lucide.createIcons();
+      // Render immediately with default values
+      render();
+
+      // Then fetch data in background
       fetchData();
 
       // Refresh every 30 seconds
       setInterval(fetchData, 30000);
 
-      // Subscribe to realtime
-      supabase
-        .channel('glad-updates')
-        .on('postgres_changes', { event: '*', schema: 'public' }, () => {
-          fetchData();
-        })
-        .subscribe();
+      // Subscribe to realtime updates (if supabase loaded)
+      const supabase = getSupabase();
+      if (supabase) {
+        supabase
+          .channel('glad-updates')
+          .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+            fetchData();
+          })
+          .subscribe();
+      }
     });
   </script>
 </body>
